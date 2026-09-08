@@ -35,17 +35,17 @@
 <body>
 <header>
   <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#5b8cff" stroke-width="1.8"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/><path d="m9 12 2 2 4-4"/></svg>
-  <div><h1>Sentinel</h1><span>autonomous circuit breaker · GenLayer Intelligent Contract</span></div>
+  <div><h1>Sentinel</h1><span>autonomous circuit breaker · GenLayer Intelligent Contract · <a href="https://github.com/Misagh95/sentinel" style="color:#5b8cff">GitHub</a> · <a href="https://explorer-bradbury.genlayer.com/address/0x565a86900585395ad328A6a507E3f3D9c3dd3667" style="color:#5b8cff">Explorer</a></span></div>
 </header>
 
 <main>
   <section class="card">
     <h2>Connection</h2>
     <label>RPC endpoint</label>
-    <input id="rpc" value="http://127.0.0.1:4000/api" />
+    <input id="rpc" value="https://rpc-bradbury.genlayer.com" />
     <div class="row" style="margin-top:8px">
-      <div style="flex:1"><label>Sentinel address</label><input id="sentinel" class="mono" placeholder="0x…" /></div>
-      <div style="flex:1"><label>Vault address</label><input id="vault" class="mono" placeholder="0x…" /></div>
+      <div style="flex:1"><label>Sentinel address</label><input id="sentinel" class="mono" value="0x565a86900585395ad328A6a507E3f3D9c3dd3667" /></div>
+      <div style="flex:1"><label>Vault address</label><input id="vault" class="mono" value="0xa1e63b959cE47f24f3c0C178fA4a51766a304865" /></div>
     </div>
     <label>Private key (only for write calls; stays in your browser)</label>
     <input id="pk" class="mono" type="password" placeholder="0x… (optional)" />
@@ -107,7 +107,8 @@
 
   function makeClient() {
     const rpc = $("rpc").value.trim();
-    const chain = { ...gl.chains.localnet, rpcUrls: { default: { http: [rpc] } } };
+    const base = gl.chains.testnetBradbury || gl.chains.localnet;
+    const chain = { ...base, rpcUrls: { default: { http: [rpc] } } };
     const pk = $("pk").value.trim();
     account = pk ? gl.createAccount(pk) : gl.createAccount();
     client = gl.createClient({ chain, account });
