@@ -1,0 +1,17 @@
+{
+  "network": "testnet_bradbury",
+  "explorer": "https://explorer-bradbury.genlayer.com",
+  "sentinel": "0x565a86900585395ad328A6a507E3f3D9c3dd3667",
+  "vault": "0xa1e63b959cE47f24f3c0C178fA4a51766a304865",
+  "deployer": "0x8A394953f15d80F0E299c717A310e933a269313b",
+  "story": [
+    {"step": "deploy Sentinel",                      "tx": "0x3bccd1e881184ff86200a54727beb7b4d83e19137efb749da4b07c8157a62207"},
+    {"step": "deploy GuardedVault",                  "tx": "0x8460cb60958065d5635361d922ab7314e9a51ed5ca9526af2286ea99799fc0bf"},
+    {"step": "vault.set_guardian(sentinel)",         "tx": "0xef3eb806f8c0423063f6624ab68974cb5c3eb89c253883952d2d6ea349c0ef1b"},
+    {"step": "vault.deposit(10000)",                 "tx": "0x8747106fd1285d99a9e1c4dda6d7dcef0580e7c594dd1261d383627e306cd472"},
+    {"step": "ATTACK vault.migrate_liquidity(4000)", "tx": "0xf06ecec690ec632be30a8f17c094444332434f6033dabc8f0117dfff24acf134"},
+    {"step": "sentinel.check_health(vault) -> pause","tx": "0x3f7585300ac20d9d3e725f82d0750ac7d1658c50af4888e9ca8d3a13e2b9768f", "child_tx": "0x6950a7cedc8b470f2ec85bd1cbdd2262bc753878582eb95ed2a0419a5eb488ef"},
+    {"step": "ATTACK again -> reverted 'vault paused'", "tx": "0xb2533bb892e84a5208ea56a792abb001074269e466e6dd1606e4e10315246b78"},
+    {"step": "sentinel.lift_halt(vault) (owner)",    "tx": "0x313daabb79f6512990ac81f84d7cd2b518cd68b66b12423dd300ad8accb68bfd"}
+  ]
+}

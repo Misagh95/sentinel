@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sentinel — autonomous circuit breaker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --bg:#0b0f14; --card:#121924; --line:#1f2a3a; --txt:#e6edf3; --dim:#8b98a9; --ok:#2ecc71; --bad:#ff4d4f; --warn:#f5b642; --acc:#5b8cff; }
+  * { box-sizing:border-box }
+  body { margin:0; font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto; background:var(--bg); color:var(--txt) }
+  header { padding:28px 32px 8px; display:flex; align-items:center; gap:14px }
+  header h1 { margin:0; font-size:22px; letter-spacing:.3px } header span { color:var(--dim) }
+  main { padding:16px 32px 48px; display:grid; gap:18px; grid-template-columns: 1.1fr 1fr; max-width:1200px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px }
+  .card h2 { margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--dim) }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+  input, textarea, select { width:100%; background:#0d131c; border:1px solid var(--line); color:var(--txt); border-radius:9px; padding:9px 11px; font:inherit }
+  textarea { min-height:70px; resize:vertical }
+  label { font-size:12px; color:var(--dim); display:block; margin:10px 0 4px }
+  button { background:var(--acc); color:#fff; border:0; border-radius:9px; padding:9px 14px; font:inherit; font-weight:600; cursor:pointer }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt) }
+  button:disabled { opacity:.5; cursor:default }
+  .stat { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px }
+  .stat div { background:#0d131c; border:1px solid var(--line); border-radius:10px; padding:10px 12px }
+  .stat b { display:block; font-size:20px } .stat small { color:var(--dim) }
+  .pill { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700 }
+  .pill.ok { background:rgba(46,204,113,.15); color:var(--ok) } .pill.bad { background:rgba(255,77,79,.15); color:var(--bad) } .pill.warn { background:rgba(245,182,66,.15); color:var(--warn) }
+  table { width:100%; border-collapse:collapse; font-size:13px } td,th { padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top } th { color:var(--dim); font-weight:600 }
+  .mono { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px }
+  #log { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--dim); white-space:pre-wrap; max-height:220px; overflow:auto; background:#0d131c; border-radius:10px; padding:10px }
+  .full { grid-column:1 / -1 }
+  @media (max-width:900px){ main { grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+<header>
+  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#5b8cff" stroke-width="1.8"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/><path d="m9 12 2 2 4-4"/></svg>
+  <div><h1>Sentinel</h1><span>autonomous circuit breaker · GenLayer Intelligent Contract</span></div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Connection</h2>
+    <label>RPC endpoint</label>
+    <input id="rpc" value="http://127.0.0.1:4000/api" />
+    <div class="row" style="margin-top:8px">
+      <div style="flex:1"><label>Sentinel address</label><input id="sentinel" class="mono" placeholder="0x…" /></div>
+      <div style="flex:1"><label>Vault address</label><input id="vault" class="mono" placeholder="0x…" /></div>
+    </div>
+    <label>Private key (only for write calls; stays in your browser)</label>
+    <input id="pk" class="mono" type="password" placeholder="0x… (optional)" />
+    <div class="row" style="margin-top:12px">
+      <button id="connect">Connect &amp; refresh</button>
+      <button id="auto" class="ghost">Auto-refresh: off</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Guarded contract</h2>
+    <div class="row"><span id="vstate" class="pill ok">—</span><span id="vreason" style="color:var(--dim);font-size:13px"></span></div>
+    <div class="stat">
+      <div><small>reserves</small><b id="reserves">—</b></div>
+      <div><small>drawdown</small><b id="drawdown">—</b></div>
+      <div><small>max single withdraw</small><b id="maxw">—</b></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="health" class="ghost">Run check_health()</button>
+      <button id="lift" class="ghost">Lift halt (owner)</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Policy</h2>
+    <div id="policy" class="mono" style="color:var(--dim)">—</div>
+  </section>
+
+  <section class="card">
+    <h2>Report an incident</h2>
+    <label>Evidence URL (tx trace, advisory, monitoring dashboard…)</label>
+    <input id="evurl" placeholder="https://…" />
+    <label>What happened?</label>
+    <textarea id="evdesc" placeholder="migrate_liquidity is callable by anyone; attacker moved 2000…"></textarea>
+    <label>Stake (wei)</label>
+    <input id="stake" value="10" />
+    <div class="row" style="margin-top:12px"><button id="report">Stake &amp; report</button><span id="reportres" style="color:var(--dim)"></span></div>
+  </section>
+
+  <section class="card full">
+    <h2>Incident log <span style="float:right;font-weight:400" id="count"></span></h2>
+    <table><thead><tr><th>#</th><th>action</th><th>sev</th><th>conf</th><th>reporter</th><th>evidence</th><th>reason</th><th>at</th></tr></thead><tbody id="incidents"></tbody></table>
+  </section>
+
+  <section class="card full"><h2>Log</h2><div id="log"></div></section>
+</main>
+
+<script type="module">
+  // genlayer-js from CDN. The in-app preview blocks network access; open this file in a browser (or serve it) to use it.
+  let gl;
+  try { gl = await import("https://esm.sh/genlayer-js@0.19.1"); } catch (e) { log("genlayer-js failed to load: " + e.message); }
+
+  const $ = (id) => document.getElementById(id);
+  const log = (m) => { $("log").textContent = new Date().toLocaleTimeString() + "  " + m + "\n" + $("log").textContent; };
+  const qs = new URLSearchParams(location.search);
+  for (const k of ["rpc", "sentinel", "vault"]) if (qs.get(k)) $(k).value = qs.get(k);
+
+  let client, account, timer = null;
+
+  function makeClient() {
+    const rpc = $("rpc").value.trim();
+    const chain = { ...gl.chains.localnet, rpcUrls: { default: { http: [rpc] } } };
+    const pk = $("pk").value.trim();
+    account = pk ? gl.createAccount(pk) : gl.createAccount();
+    client = gl.createClient({ chain, account });
+    if (!pk) log("no private key: read-only mode (a throwaway account was created)");
+  }
+
+  async function read(address, functionName, args = []) {
+    return client.readContract({ address, functionName, args });
+  }
+  async function write(address, functionName, args = [], value = 0n) {
+    const hash = await client.writeContract({ address, functionName, args, value });
+    log(`tx ${functionName} → ${hash}`);
+    const r = await client.waitForTransactionReceipt({ hash, status: "ACCEPTED", retries: 60 });
+    log(`tx ${functionName} ${r?.status || "done"}`);
+    return r;
+  }
+
+  async function refresh() {
+    if (!client) makeClient();
+    const vault = $("vault").value.trim(), sentinel = $("sentinel").value.trim();
+    try {
+      if (vault) {
+        const s = await read(vault, "get_status");
+        $("vstate").textContent = s.paused ? "PAUSED" : "RUNNING";
+        $("vstate").className = "pill " + (s.paused ? "bad" : (s.max_withdraw_bps < 10000 ? "warn" : "ok"));
+        $("vreason").textContent = s.paused ? s.pause_reason : (s.max_withdraw_bps < 10000 ? "throttled" : "");
+        $("reserves").textContent = Number(s.reserves).toLocaleString();
+        $("drawdown").textContent = (Number(s.drawdown_bps) / 100).toFixed(1) + "%";
+        $("maxw").textContent = (Number(s.max_withdraw_bps) / 100).toFixed(0) + "%";
+      }
+      if (sentinel && vault) {
+        const p = await read(sentinel, "get_policy", [vault]);
+        $("policy").innerHTML =
+          `<div>${esc(p.rules)}</div><div style="margin-top:6px">tripwire ${p.max_drawdown_bps / 100}% drawdown · throttle→${p.throttle_bps / 100}% · min confidence ${p.min_confidence}% · min stake ${p.min_stake} · bounty ${p.bounty} · ` +
+          `<span class="pill ${p.halted ? "bad" : "ok"}">${p.halted ? "HALTED" : "ACTIVE"}</span></div>`;
+        const inc = await read(sentinel, "list_incidents", [vault]);
+        $("count").textContent = inc.length + " incidents";
+        $("incidents").innerHTML = inc.slice().reverse().map(i => `<tr>
+          <td>${i.id}</td><td><span class="pill ${i.action === "none" ? "ok" : (i.action === "throttle" ? "warn" : "bad")}">${i.action}</span></td>
+          <td>${i.severity}</td><td>${i.confidence}%</td><td class="mono">${short(i.reporter)}</td>
+          <td class="mono">${i.evidence_url ? `<a href="${esc(i.evidence_url)}" target="_blank" style="color:var(--acc)">${esc(i.evidence_url.slice(0, 48))}…</a>` : "(health check)"}</td>
+          <td>${esc(i.reason)}</td><td class="mono">${(i.reported_at || "").slice(0, 19)}</td></tr>`).join("");
+      }
+    } catch (e) { log("read failed: " + (e.message || e)); }
+  }
+
+  $("connect").onclick = () => { makeClient(); refresh(); };
+  $("auto").onclick = () => {
+    if (timer) { clearInterval(timer); timer = null; $("auto").textContent = "Auto-refresh: off"; }
+    else { timer = setInterval(refresh, 5000); $("auto").textContent = "Auto-refresh: 5s"; }
+  };
+  $("health").onclick = async () => { try { await write($("sentinel").value.trim(), "check_health", [$("vault").value.trim()]); refresh(); } catch (e) { log("check_health failed: " + e.message); } };
+  $("lift").onclick = async () => { try { await write($("sentinel").value.trim(), "lift_halt", [$("vault").value.trim()]); refresh(); } catch (e) { log("lift_halt failed: " + e.message); } };
+  $("report").onclick = async () => {
+    $("report").disabled = true; $("reportres").textContent = "validators are fetching evidence & reaching consensus…";
+    try {
+      await write($("sentinel").value.trim(), "report_incident",
+        [$("vault").value.trim(), $("evurl").value.trim(), $("evdesc").value.trim()], BigInt($("stake").value || "0"));
+      $("reportres").textContent = "done — see incident log";
+      refresh();
+    } catch (e) { $("reportres").textContent = "failed: " + e.message; log("report failed: " + e.message); }
+    $("report").disabled = false;
+  };
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const short = (a) => a ? a.slice(0, 6) + "…" + a.slice(-4) : "";
+  if ($("sentinel").value && $("vault").value) { makeClient(); refresh(); }
+</script>
+</body>
+</html>
