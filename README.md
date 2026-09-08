@@ -151,7 +151,7 @@ export ACCOUNT_PRIVATE_KEY=0x…
 python scripts/deploy.py --network testnet_asimov --fund 1000000000000000000
 ```
 
-Addresses are written to `deployments/<network>.json`. Open `frontend/index.html`
+Addresses are written to `deployments/<network>.json`. Open `docs/index.html`
 (`?rpc=…&sentinel=0x…&vault=0x…`) for a live dashboard: vault health, policy, incident log, and a form to stake & report.
 
 ## Project layout
@@ -162,7 +162,7 @@ contracts/vault.py      reference guarded contract with the guardian interface (
 tests/                  multi-contract test harness on glsim's engine; web + LLM mocked, cross-contract calls real
 scripts/demo.py         end-to-end story (offline or --live)
 scripts/deploy.py       deploy + wire on localnet / studionet / testnets
-frontend/index.html     zero-build dashboard (genlayer-js)
+docs/index.html     zero-build dashboard (genlayer-js)
 ```
 
 ## Design notes

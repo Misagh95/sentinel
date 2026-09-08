@@ -9,7 +9,7 @@ Form: https://portal.genlayer.foundation/agent-tank/hackathon/submit
 Autonomous Protocols
 
 ## 01 GitHub repository
-https://github.com/<YOUR_USERNAME>/sentinel
+https://github.com/Misagh95/sentinel
 
 ## Project name
 Sentinel
@@ -38,7 +38,7 @@ https://www.youtube.com/watch?v=<YOUR_VIDEO_ID>
 ## 05 How-to (steps)
 
 Step 1 — Install
-    git clone https://github.com/<YOUR_USERNAME>/sentinel && cd sentinel
+    git clone https://github.com/Misagh95/sentinel && cd sentinel
     pip install -r requirements.txt
 
 Step 2 — Lint with the official GenVM linter
@@ -63,7 +63,7 @@ Step 5 — (optional) Same demo with a real LLM
 Step 6 — (optional) Deploy to a network and open the dashboard
     export ACCOUNT_PRIVATE_KEY=0x...
     python scripts/deploy.py --network testnet_asimov
-    open frontend/index.html?rpc=<RPC>&sentinel=<ADDR>&vault=<ADDR>
+    open docs/index.html?rpc=<RPC>&sentinel=<ADDR>&vault=<ADDR>
 
 ## 06 Review verification (max 500 chars, private)
 On Bradbury: read vault 0xa1e6…4865 get_status() → guardian=0x565a…3667 (Sentinel). Tx 0xf06e…f134 = attacker drain 4000 (40%). Tx 0x3f75…768f = check_health → Sentinel emitted pause(); child tx 0x6950…88ef paused the vault. Tx 0xb253…6b78 = attacker's 2nd drain FINISHED_WITH_ERROR "vault paused". Sentinel list_incidents(vault) → #0 tripwire sev 5. Locally: `pytest -q` → 20 passed; `python scripts/demo.py` shows full LLM path.
@@ -75,6 +75,6 @@ Sentinel:     https://explorer-bradbury.genlayer.com/address/0x565a86900585395ad
 GuardedVault: https://explorer-bradbury.genlayer.com/address/0xa1e63b959cE47f24f3c0C178fA4a51766a304865
 
 ## 07 Project links
-Website (required): https://<YOUR_USERNAME>.github.io/sentinel/   (GitHub Pages serving frontend/index.html)
+Website (required): https://Misagh95.github.io/sentinel/   (GitHub Pages serving docs/index.html)
     — or the GitHub repo URL if you don't set up Pages
-GitHub: https://github.com/<YOUR_USERNAME>/sentinel
+GitHub: https://github.com/Misagh95/sentinel
