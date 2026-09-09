@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sentinel — autonomous circuit breaker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --bg:#0b0f14; --card:#121924; --line:#1f2a3a; --txt:#e6edf3; --dim:#8b98a9; --ok:#2ecc71; --bad:#ff4d4f; --warn:#f5b642; --acc:#5b8cff; }
+  * { box-sizing:border-box }
+  body { margin:0; font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto; background:var(--bg); color:var(--txt) }
+  header { padding:28px 32px 8px; display:flex; align-items:center; gap:14px }
+  header h1 { margin:0; font-size:22px; letter-spacing:.3px } header span { color:var(--dim) }
+  main { padding:16px 32px 48px; display:grid; gap:18px; grid-template-columns: 1.1fr 1fr; max-width:1200px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px }
+  .card h2 { margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--dim) }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+  input, textarea, select { width:100%; background:#0d131c; border:1px solid var(--line); color:var(--txt); border-radius:9px; padding:9px 11px; font:inherit }
+  textarea { min-height:70px; resize:vertical }
+  label { font-size:12px; color:var(--dim); display:block; margin:10px 0 4px }
+  button { background:var(--acc); color:#fff; border:0; border-radius:9px; padding:9px 14px; font:inherit; font-weight:600; cursor:pointer }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt) }
+  button:disabled { opacity:.5; cursor:default }
+  .stat { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px }
+  .stat div { background:#0d131c; border:1px solid var(--line); border-radius:10px; padding:10px 12px }
+  .stat b { display:block; font-size:20px } .stat small { color:var(--dim) }
+  .pill { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700 }
+  .pill.ok { background:rgba(46,204,113,.15); color:var(--ok) } .pill.bad { background:rgba(255,77,79,.15); color:var(--bad) } .pill.warn { background:rgba(245,182,66,.15); color:var(--warn) }
+  table { width:100%; border-collapse:collapse; font-size:13px } td,th { padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top } th { color:var(--dim); font-weight:600 }
+  .mono { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px }
+  #log { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--dim); white-space:pre-wrap; max-height:220px; overflow:auto; background:#0d131c; border-radius:10px; padding:10px }
+  .full { grid-column:1 / -1 }
+  @media (max-width:900px){ main { grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+<header>
+  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#5b8cff" stroke-width="1.8"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/><path d="m9 12 2 2 4-4"/></svg>
+  <div><h1>Sentinel</h1><span>autonomous circuit breaker · GenLayer Intelligent Contract · <a href="https://github.com/Misagh95/sentinel" style="color:#5b8cff">GitHub</a> · <a href="https://explorer-bradbury.genlayer.com/address/0x565a86900585395ad328A6a507E3f3D9c3dd3667" style="color:#5b8cff">Explorer</a></span></div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Connection</h2>
+    <label>RPC endpoint</label>
+    <input id="rpc" value="https://rpc-bradbury.genlayer.com" />
+    <div class="row" style="margin-top:8px">
+      <div style="flex:1"><label>Sentinel address</label><input id="sentinel" class="mono" value="0x565a86900585395ad328A6a507E3f3D9c3dd3667" /></div>
+      <div style="flex:1"><label>Vault address</label><input id="vault" class="mono" value="0xa1e63b959cE47f24f3c0C178fA4a51766a304865" /></div>
+    </div>
+    <label>Private key (only for write calls; stays in your browser)</label>
+    <input id="pk" class="mono" type="password" placeholder="0x… (optional)" />
+    <div class="row" style="margin-top:12px">
+      <button id="connect">Connect &amp; refresh</button>
+      <button id="auto" class="ghost">Auto-refresh: off</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Guarded contract</h2>
+    <div class="row"><span id="vstate" class="pill ok">—</span><span id="vreason" style="color:var(--dim);font-size:13px"></span></div>
+    <div class="stat">
+      <div><small>reserves</small><b id="reserves">—</b></div>
+      <div><small>drawdown</small><b id="drawdown">—</b></div>
+      <div><small>max single withdraw</small><b id="maxw">—</b></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="health" class="ghost">Run check_health()</button>
+      <button id="lift" class="ghost">Lift halt (owner)</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Policy</h2>
+    <div id="policy" class="mono" style="color:var(--dim)">—</div>
+  </section>
+
+  <section class="card">
+    <h2>Report an incident</h2>
+    <label>Evidence URL (tx trace, advisory, monitoring dashboard…)</label>
+    <input id="evurl" placeholder="https://…" />
+    <label>What happened?</label>
+    <textarea id="evdesc" placeholder="migrate_liquidity is callable by anyone; attacker moved 2000…"></textarea>
+    <label>Stake (wei)</label>
+    <input id="stake" value="0" />
+    <div class="row" style="margin-top:12px"><button id="report">Stake &amp; report</button><span id="reportres" style="color:var(--dim)"></span></div>
+  </section>
+
+  <section class="card full">
+    <h2>Incident log <span style="float:right;font-weight:400" id="count"></span></h2>
+    <table><thead><tr><th>#</th><th>action</th><th>sev</th><th>conf</th><th>reporter</th><th>evidence</th><th>reason</th><th>at</th></tr></thead><tbody id="incidents"></tbody></table>
+  </section>
+
+  <section class="card full"><h2>Log</h2><div id="log"></div></section>
+</main>
+
+<script type="module">
+  // ---------------------------------------------------------------------------
+  // Reads: raw JSON-RPC (gen_call) + a tiny GenLayer calldata codec — no library,
+  // so the dashboard keeps working across RPC/SDK versions.
+  // Writes: genlayer-js (loaded lazily, only when a private key is provided).
+  // ---------------------------------------------------------------------------
+  const $ = (id) => document.getElementById(id);
+  const log = (m) => { $("log").textContent = new Date().toLocaleTimeString() + "  " + m + "\n" + $("log").textContent; };
+  const qs = new URLSearchParams(location.search);
+  for (const k of ["rpc", "sentinel", "vault"]) if (qs.get(k)) $(k).value = qs.get(k);
+
+  // ---- calldata codec (spec: 3-bit type tag in low bits of a ULEB128) ----
+  const T = { SPECIAL: 0, PINT: 1, NINT: 2, BYTES: 3, STR: 4, ARR: 5, MAP: 6 };
+  const SP = { NULL: 0, FALSE: 8, TRUE: 16, ADDR: 24 };
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  function uleb(n, out) { n = BigInt(n); if (n === 0n) { out.push(0); return; } while (n > 0n) { let c = Number(n & 0x7fn); n >>= 7n; if (n > 0n) c |= 0x80; out.push(c); } }
+  function cdEncode(v, out = []) {
+    if (v === null || v === undefined) out.push(SP.NULL);
+    else if (v === true) out.push(SP.TRUE);
+    else if (v === false) out.push(SP.FALSE);
+    else if (typeof v === "bigint" || typeof v === "number") { const n = BigInt(v); n >= 0n ? uleb((n << 3n) | BigInt(T.PINT), out) : uleb(((-n - 1n) << 3n) | BigInt(T.NINT), out); }
+    else if (typeof v === "string") { const b = enc.encode(v); uleb((BigInt(b.length) << 3n) | BigInt(T.STR), out); out.push(...b); }
+    else if (v instanceof Uint8Array) { uleb((BigInt(v.length) << 3n) | BigInt(T.BYTES), out); out.push(...v); }
+    else if (Array.isArray(v)) { uleb((BigInt(v.length) << 3n) | BigInt(T.ARR), out); v.forEach(x => cdEncode(x, out)); }
+    else if (typeof v === "object") { const keys = Object.keys(v).sort(); uleb((BigInt(keys.length) << 3n) | BigInt(T.MAP), out); for (const k of keys) { const kb = enc.encode(k); uleb(kb.length, out); out.push(...kb); cdEncode(v[k], out); } }
+    else throw new Error("cannot encode " + typeof v);
+    return out;
+  }
+  function cdDecode(bytes) {
+    let i = 0;
+    const rd = () => { let r = 0n, off = 0n, m; do { m = bytes[i++]; r |= BigInt(m & 0x7f) << off; off += 7n; } while (m & 0x80); return r; };
+    const num = (b) => (b <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(b) : b);
+    const impl = () => {
+      const code = rd(); const typ = Number(code & 7n);
+      if (typ === T.SPECIAL) {
+        if (code === 0n) return null; if (code === 8n) return false; if (code === 16n) return true;
+        if (code === 24n) { let h = "0x"; for (let k = 0; k < 20; k++) h += bytes[i++].toString(16).padStart(2, "0"); return h; }
+        throw new Error("bad special " + code);
+      }
+      const n = code >> 3n;
+      if (typ === T.PINT) return num(n);
+      if (typ === T.NINT) return num(-n - 1n);
+      if (typ === T.BYTES) { const b = bytes.slice(i, i + Number(n)); i += Number(n); return b; }
+      if (typ === T.STR) { const s = dec.decode(bytes.slice(i, i + Number(n))); i += Number(n); return s; }
+      if (typ === T.ARR) { const a = []; for (let k = 0; k < Number(n); k++) a.push(impl()); return a; }
+      if (typ === T.MAP) { const o = {}; for (let k = 0; k < Number(n); k++) { const l = Number(rd()); const key = dec.decode(bytes.slice(i, i + l)); i += l; o[key] = impl(); } return o; }
+      throw new Error("bad type " + typ);
+    };
+    return impl();
+  }
+  // ---- minimal RLP (enough for [bytes, bytes]) ----
+  function rlpBytes(b) { if (b.length === 1 && b[0] < 0x80) return [...b]; return [...rlpLen(b.length, 0x80), ...b]; }
+  function rlpLen(len, off) { if (len < 56) return [off + len]; const hex = len.toString(16).padStart(2, "0"); const lb = hex.match(/../g).map(h => parseInt(h, 16)); return [off + 55 + lb.length, ...lb]; }
+  function rlpList(items) { const body = items.flatMap(rlpBytes); return [...rlpLen(body.length, 0xc0), ...body]; }
+  const toHex = (arr) => "0x" + Array.from(arr, b => b.toString(16).padStart(2, "0")).join("");
+  const fromHex = (h) => new Uint8Array((h.startsWith("0x") ? h.slice(2) : h).match(/../g).map(x => parseInt(x, 16)));
+
+  async function rpc(method, params) {
+    const r = await fetch($("rpc").value.trim(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+    const j = await r.json(); if (j.error) throw new Error(j.error.message || JSON.stringify(j.error)); return j.result;
+  }
+  async function read(address, functionName, args = []) {
+    const cd = { method: functionName }; if (args.length) cd.args = args;
+    const data = toHex(rlpList([cdEncode(cd), [0]]));
+    const res = await rpc("gen_call", [{ type: "read", to: address, from: "0x0000000000000000000000000000000000000001", data, transaction_hash_variant: "latest-nonfinal" }]);
+    let hex = typeof res === "string" ? res : res?.data;
+    if (res && typeof res === "object" && res.status && res.status.code !== 0) throw new Error(res.status.message || "contract error");
+    if (!hex) throw new Error("empty result");
+    return cdDecode(fromHex(hex));
+  }
+
+  // ---- writes via genlayer-js (only when a key is given) ----
+  let gl, client;
+  async function getClient() {
+    const pk = $("pk").value.trim();
+    if (!pk) throw new Error("enter a private key to send transactions");
+    if (!gl) { gl = await import("https://esm.sh/genlayer-js@1.1.8"); }
+    const base = gl.chains.testnetBradbury || gl.chains.testnetAsimov || gl.chains.localnet;
+    const chain = { ...base, rpcUrls: { default: { http: [$("rpc").value.trim()] } } };
+    client = gl.createClient({ chain, account: gl.createAccount(pk) });
+    return client;
+  }
+  async function write(address, functionName, args = [], value = 0n) {
+    const c = await getClient();
+    const hash = await c.writeContract({ address, functionName, args, value });
+    log(`tx ${functionName} → ${hash}`);
+    const r = await c.waitForTransactionReceipt({ hash, status: "ACCEPTED", retries: 60 });
+    log(`tx ${functionName} ${r?.status_name || r?.status || "done"}`);
+    return r;
+  }
+
+  async function refresh() {
+    const vault = $("vault").value.trim(), sentinel = $("sentinel").value.trim();
+    try {
+      if (vault) {
+        const s = await read(vault, "get_status");
+        $("vstate").textContent = s.paused ? "PAUSED" : "RUNNING";
+        $("vstate").className = "pill " + (s.paused ? "bad" : (s.max_withdraw_bps < 10000 ? "warn" : "ok"));
+        $("vreason").textContent = s.paused ? s.pause_reason : (s.max_withdraw_bps < 10000 ? "throttled" : "");
+        $("reserves").textContent = Number(s.reserves).toLocaleString();
+        $("drawdown").textContent = (Number(s.drawdown_bps) / 100).toFixed(1) + "%";
+        $("maxw").textContent = (Number(s.max_withdraw_bps) / 100).toFixed(0) + "%";
+        log(`vault: ${s.paused ? "PAUSED" : "RUNNING"} reserves=${s.reserves} guardian=${s.guardian}`);
+      }
+      if (sentinel && vault) {
+        const p = await read(sentinel, "get_policy", [vault]);
+        $("policy").innerHTML =
+          `<div>${esc(p.rules)}</div><div style="margin-top:6px">tripwire ${p.max_drawdown_bps / 100}% drawdown · throttle→${p.throttle_bps / 100}% · min confidence ${p.min_confidence}% · min stake ${p.min_stake} · bounty ${p.bounty} · ` +
+          `<span class="pill ${p.halted ? "bad" : "ok"}">${p.halted ? "HALTED" : "ACTIVE"}</span></div>`;
+        const inc = await read(sentinel, "list_incidents", [vault]);
+        $("count").textContent = inc.length + " incidents";
+        $("incidents").innerHTML = inc.slice().reverse().map(i => `<tr>
+          <td>${i.id}</td><td><span class="pill ${i.action === "none" ? "ok" : (i.action === "throttle" ? "warn" : "bad")}">${i.action}</span></td>
+          <td>${i.severity}</td><td>${i.confidence}%</td><td class="mono">${short(i.reporter)}</td>
+          <td class="mono">${i.evidence_url ? `<a href="${esc(i.evidence_url)}" target="_blank" style="color:var(--acc)">${esc(i.evidence_url.slice(0, 48))}…</a>` : "(health check)"}</td>
+          <td>${esc(i.reason)}</td><td class="mono">${(i.reported_at || "").slice(0, 19)}</td></tr>`).join("");
+      }
+    } catch (e) { log("read failed: " + (e.message || e)); }
+  }
+
+  let timer = null;
+  $("connect").onclick = refresh;
+  $("auto").onclick = () => {
+    if (timer) { clearInterval(timer); timer = null; $("auto").textContent = "Auto-refresh: off"; }
+    else { timer = setInterval(refresh, 8000); $("auto").textContent = "Auto-refresh: 8s"; }
+  };
+  $("health").onclick = async () => { try { await write($("sentinel").value.trim(), "check_health", [$("vault").value.trim()]); refresh(); } catch (e) { log("check_health failed: " + e.message); } };
+  $("lift").onclick = async () => { try { await write($("sentinel").value.trim(), "lift_halt", [$("vault").value.trim()]); refresh(); } catch (e) { log("lift_halt failed: " + e.message); } };
+  $("report").onclick = async () => {
+    $("report").disabled = true; $("reportres").textContent = "validators are fetching evidence & reaching consensus…";
+    try {
+      await write($("sentinel").value.trim(), "report_incident",
+        [$("vault").value.trim(), $("evurl").value.trim(), $("evdesc").value.trim()], BigInt($("stake").value || "0"));
+      $("reportres").textContent = "done — see incident log";
+      refresh();
+    } catch (e) { $("reportres").textContent = "failed: " + e.message; log("report failed: " + e.message); }
+    $("report").disabled = false;
+  };
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const short = (a) => a ? a.slice(0, 6) + "…" + a.slice(-4) : "";
+  if ($("sentinel").value && $("vault").value) refresh();
+</script>
+</body>
+</html>
