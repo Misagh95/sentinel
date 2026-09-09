@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" width="160" alt="Sentinel logo"></p>
+
 # 🛡 Sentinel — autonomous circuit breaker for smart contracts
 
 > **Agent Tank Hackathon · Track: Autonomous Protocols**
